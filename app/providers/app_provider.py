@@ -6,6 +6,10 @@ from loguru import logger
 from redis.asyncio import from_url
 
 from app.models.BaseModels import Base  # 创建表的关键
+# 导入所有模型类，确保它们被注册到 Base.metadata 中
+from app.models.Agent import Agent
+from app.models.LLM import LLM  
+from app.models.Tool import Tool
 from app.providers.database import (
     SCHEMA_NAME,
     check_database_health, 
