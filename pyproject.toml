@@ -9,7 +9,7 @@ packages = ["app", "config", "bootstrap"]
 name = "now-find-agent"
 version = "1.0.0"
 description = "NOW Find Agent - 智能信息发现与分析平台，基于 FastAPI 的现代化代理系统"
-readme = "QUICK_START.md"
+readme = "README.md"
 requires-python = ">=3.11"
 authors = [
     { name = "NOW Find Agent Team", email = "team@nowfindagent.com" }
