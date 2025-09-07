@@ -58,7 +58,7 @@ app.include_router(example_router)
 @app.get("/")
 async def root():
     return {
-        "message": "FastAPI 脚手架项目",
+        "message": "NOW Find Agent - 智能信息发现代理",
         "version": "1.0.0",
         "docs_url": "/docs",
         "status": "running"

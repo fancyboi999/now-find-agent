@@ -1,4 +1,4 @@
-# FastAPI 脚手架项目依赖
+# NOW Find Agent 项目依赖
 
 # Web 框架
 fastapi>=0.104.0

@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# FastAPI Scaffold 项目设置脚本
+# NOW Find Agent 项目设置脚本
 # ==============================
 
 set -e  # 遇到错误时退出
 
-echo "🚀 FastAPI Scaffold 项目设置"
+echo "🚀 NOW Find Agent 项目设置"
 echo "============================="
 
 # 颜色定义
@@ -205,7 +205,7 @@ show_usage() {
 
 # 主函数
 main() {
-    echo -e "${BLUE}开始设置 FastAPI Scaffold 项目...${NC}"
+    echo -e "${BLUE}开始设置 NOW Find Agent 项目...${NC}"
     echo ""
     
     check_python

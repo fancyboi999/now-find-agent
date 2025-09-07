@@ -21,7 +21,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """FastAPI应用生命周期管理
     
-    脚手架版本 - 提供基础的数据库、Redis连接管理
+    NOW Find Agent 版本 - 提供基础的数据库、Redis连接管理
     
     before yield: 服务器启动前的初始化操作
     after yield: 服务器关闭后的清理操作
@@ -104,7 +104,7 @@ async def lifespan(app: FastAPI):
 def add_global_middleware(app: FastAPI, app_settings):
     """注册全局中间件
     
-    脚手架版本 - 提供基础的CORS和请求日志中间件
+    NOW Find Agent 版本 - 提供基础的CORS和请求日志中间件
     可根据业务需求添加更多中间件
     """
     # 导入请求日志中间件

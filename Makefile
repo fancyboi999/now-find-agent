@@ -1,11 +1,11 @@
-# FastAPI Scaffold Makefile
+# NOW Find Agent Makefile
 # =========================
 
 .PHONY: help install install-dev install-all clean test lint format run dev
 
 # 默认目标
 help: ## 显示帮助信息
-	@echo "FastAPI Scaffold - 项目管理命令"
+	@echo "NOW Find Agent - 项目管理命令"
 	@echo "==============================="
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
@@ -99,10 +99,10 @@ deps-outdated: ## 检查过期依赖
 
 # Docker 相关
 docker-build: ## 构建Docker镜像
-	docker build -t fastapi-scaffold .
+	docker build -t now-find-agent .
 
 docker-run: ## 运行Docker容器
-	docker run -p 8000:8000 fastapi-scaffold
+	docker run -p 8000:8000 now-find-agent
 
 # 文档生成
 docs: ## 生成API文档
@@ -124,7 +124,7 @@ init: ## 初始化新项目
 
 # 快速启动（新手友好）
 quick-start: ## 🚀 一键快速启动（新手推荐）
-	@echo "🚀 FastAPI Scaffold 快速启动"
+	@echo "🚀 NOW Find Agent 快速启动"
 	@echo "=============================="
 	@echo "📋 检查虚拟环境..."
 	@if [ ! -d ".venv" ]; then \

@@ -1,22 +1,22 @@
-# 🚀 FastAPI Base - 现代化企业级脚手架
+# 🤖 NOW Find Agent - 智能信息发现与分析平台
 
-一个基于 FastAPI 的现代化、企业级 Python Web API 脚手架，采用最新的项目管理和开发实践，支持多环境、多数据库，开箱即用。
+一个基于 FastAPI 的现代化智能代理系统，提供信息发现、分析和处理能力，采用最新的异步架构和企业级设计模式。
 
 ## ✨ 核心特性
 
-- 🚀 **现代化架构** - 基于 FastAPI + Pydantic + SQLAlchemy 的异步优先架构
-- 🏗️ **企业级设计** - Provider模式、依赖注入、清晰的分层架构
+- 🤖 **智能代理** - 基于 FastAPI 的异步代理系统，支持复杂信息处理任务
+- 🔍 **信息发现** - 强大的信息搜索、抽取和分析能力
+- 🧠 **AI 驱动** - 集成大语言模型，提供智能分析和决策支持
 - 🌍 **多环境支持** - dev/test/uat/prod 四环境架构，智能配置管理
 - 🗄️ **多数据库支持** - SQLite/PostgreSQL/MySQL，智能检测与优化
 - 📦 **现代包管理** - pyproject.toml + uv，分组依赖管理
 - 🛠️ **完整工具链** - 集成开发、测试、部署全套工具
-- 📖 **自动文档** - OpenAPI/Swagger 自动生成，开发者友好
 - 🔧 **生产就绪** - 考虑性能、安全、监控等生产需求
 
 ## 📊 项目结构
 
 ```
-fastapi-base/
+now-find-agent/
 ├── 📋 项目配置
 │   ├── pyproject.toml          # 现代化项目配置（PEP 518）
 │   ├── .env.example            # 环境配置示例
@@ -426,7 +426,7 @@ git push origin feature/new-feature
 
 ## 🎉 开始您的开发之旅
 
-现在您已经掌握了 FastAPI Base 的完整使用方法！
+现在您已经掌握了 NOW Find Agent 的完整使用方法！
 
 - ✅ 快速启动项目
 - ✅ 多环境配置管理  

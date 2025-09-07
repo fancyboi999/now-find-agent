@@ -38,7 +38,7 @@ def extract_schema_from_url(database_url: str) -> str:
         return "public"
 
 
-# 脚手架数据库配置 - 如果未配置则使用SQLite
+# NOW Find Agent 数据库配置 - 如果未配置则使用SQLite
 if not settings.DATABASE_URL:
     DATABASE_URL = "sqlite+aiosqlite:///./app.db"
     logger.info("DATABASE_URL未配置，使用默认的SQLite数据库")
@@ -120,7 +120,7 @@ def build_connection_args(db_type: str, schema_name: str) -> dict:
     if db_type == "postgresql":
         return {
             "server_settings": {
-                "application_name": "fastapi-scaffold",
+                "application_name": "now-find-agent",
                 "search_path": f"{schema_name},public",
             },
             "command_timeout": 60,

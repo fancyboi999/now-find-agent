@@ -6,19 +6,20 @@ build-backend = "hatchling.build"
 packages = ["app", "config", "bootstrap"]
 
 [project]
-name = "fastapi-scaffold"
+name = "now-find-agent"
 version = "1.0.0"
-description = "企业级 FastAPI 脚手架 - 支持多环境、多数据库的现代化 Web API 框架"
+description = "NOW Find Agent - 智能信息发现与分析平台，基于 FastAPI 的现代化代理系统"
 readme = "QUICK_START.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "FastAPI Scaffold Team", email = "team@fastapi-scaffold.com" }
+    { name = "NOW Find Agent Team", email = "team@nowfindagent.com" }
 ]
 keywords = [
     "fastapi",
-    "scaffold",
-    "web-framework",
-    "api",
+    "agent",
+    "ai",
+    "information-discovery",
+    "llm",
     "async",
     "multi-database",
     "multi-environment"
@@ -113,15 +114,15 @@ production = [
 
 # 完整安装（包含所有功能）
 all = [
-    "fastapi-scaffold[database,ai,dev,production]"
+    "now-find-agent[database,ai,dev,production]"
 ]
 
 [project.urls]
-Homepage = "https://github.com/fastapi-scaffold/fastapi-scaffold"
-Repository = "https://github.com/fastapi-scaffold/fastapi-scaffold.git"
+Homepage = "https://github.com/fancyboi999/now-find-agent"
+Repository = "https://github.com/fancyboi999/now-find-agent.git"
 
 [project.scripts]
-fastapi-scaffold = "main:app"
+now-find-agent = "main:app"
 
 # Black 代码格式化配置
 [tool.black]
