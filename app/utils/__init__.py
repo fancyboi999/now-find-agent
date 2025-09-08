@@ -10,7 +10,7 @@
 """
 
 # 导入子模块
-from app.utils import common, core, data, io, parsers, web
+from app.utils import common, core, data, io, web
 # 直接导出常用工具,方便使用
 from app.utils.common.decorators import log_request
 from app.utils.common.id_util import IdUtil
@@ -32,6 +32,5 @@ __all__ = [
     "io",
     # 常用工具类直接导出
     "log_request",
-    "parsers",
     "web",
 ]

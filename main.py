@@ -47,18 +47,23 @@ app = create_app()
 
 # 添加基础API路由
 from app.api import health_router, example_router
+from app.api.agents import router as agents_router
+from app.api.llms import router as llms_router
+from app.api.tools import router as tools_router
 
 app.include_router(health_router)
 app.include_router(example_router)
 
-# TODO: 在此处添加您的业务API路由 # [fixme]
-# app.include_router(your_business_router)
+# 添加业务API路由
+app.include_router(agents_router, prefix="/api/v1")
+app.include_router(llms_router, prefix="/api/v1")
+app.include_router(tools_router, prefix="/api/v1")
 
 # 添加根路径路由
 @app.get("/")
 async def root():
     return {
-        "message": "NOW Find Agent - 智能信息发现代理",
+        "message": "NOW Find Agent - 牛招招聘Agent后端",
         "version": "1.0.0",
         "docs_url": "/docs",
         "status": "running"

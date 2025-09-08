@@ -42,28 +42,22 @@ classifiers = [
 dependencies = [
     # Web框架
     "fastapi>=0.100.0",
-    "uvicorn[standard]>=0.20.0", 
+    "uvicorn[standard]>=0.20.0",
     "starlette>=0.27.0",
-    
     # 数据验证和配置
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
-    
     # 数据库核心
     "sqlalchemy[asyncio]>=2.0.0",
     "greenlet>=2.0.0",
-    
     # HTTP客户端
-    "httpx>=0.24.0",
+    "httpx[socks]>=0.24.0",
     "requests>=2.28.0",
-    
     # 缓存
     "redis>=4.5.0",
-    
     # 日志
     "loguru>=0.7.0",
-    
     # 工具
     "tenacity>=8.0.0",
     "colorama>=0.4.6",
