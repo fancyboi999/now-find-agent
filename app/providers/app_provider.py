@@ -34,6 +34,21 @@ async def lifespan(app: FastAPI):
         app (FastAPI): FastAPI应用实例
     """
     logger.info("Application starting...")
+    
+    # 首先初始化Nacos配置
+    from config.config import initialize_nacos_config, cleanup_nacos_config
+    try:
+        await initialize_nacos_config()
+        logger.info("Configuration initialized successfully")
+        
+        # 重新获取配置（可能已经从Nacos加载）
+        from config.config import get_settings
+        settings = get_settings()
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize configuration: {e}")
+        logger.info("Using default configuration")
+    
     logger.info(f"使用数据库Schema: {SCHEMA_NAME}")
 
     # 初始化全局任务字典 - 用于存储异步任务实例
@@ -66,6 +81,8 @@ async def lifespan(app: FastAPI):
 
     # 检查并创建数据库表结构
     try:
+        from app.providers.database import get_engine
+        engine, _ = get_engine()
         async with engine.begin() as conn:
             await conn.run_sync(
                 Base.metadata.create_all
@@ -87,8 +104,10 @@ async def lifespan(app: FastAPI):
 
     # 清理数据库连接
     try:
-        await engine.dispose()
-        logger.info("数据库连接已关闭")
+        from app.providers.database import engine
+        if engine is not None:
+            await engine.dispose()
+            logger.info("数据库连接已关闭")
     except Exception as e:
         logger.error(f"关闭数据库连接失败: {e}")
 
@@ -99,8 +118,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"关闭Redis连接失败: {e}")
 
-    # TODO: 在此处添加您的业务清理逻辑
-    # 例如: 关闭后台任务、清理缓存、保存状态等
+    # 清理Nacos配置
+    try:
+        from config.config import cleanup_nacos_config
+        await cleanup_nacos_config()
+        logger.info("Nacos配置已清理")
+    except Exception as e:
+        logger.error(f"清理Nacos配置失败: {e}")
 
     logger.info("Application stopped.")
 

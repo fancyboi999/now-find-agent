@@ -61,6 +61,8 @@ dependencies = [
     # 工具
     "tenacity>=8.0.0",
     "colorama>=0.4.6",
+    # 配置中心
+    "nacos-sdk-python<=2.0.9",
 ]
 
 # 可选依赖组
@@ -88,6 +90,7 @@ ai = [
     "langsmith>=0.1.0",
     "openai>=1.0.0",
     "tiktoken>=0.5.0",
+    "langgraph-cli[inmem]"
 ]   
 
 # 开发工具 - 稳定版本

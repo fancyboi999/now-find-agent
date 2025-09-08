@@ -3,10 +3,13 @@ from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import Pool
 
-from config.config import get_settings
+# 延迟获取配置，避免在模块导入时就初始化
+def get_settings():
+    from config.config import get_settings as _get_settings
+    return _get_settings()
 
-settings = get_settings()
-
+# 初始配置（默认值）
+settings = None
 
 # 从DATABASE_URL中提取schema信息
 def extract_schema_from_url(database_url: str) -> str:
@@ -38,13 +41,19 @@ def extract_schema_from_url(database_url: str) -> str:
         return "public"
 
 
-# NOW Find Agent 数据库配置 - 如果未配置则使用SQLite
-if not settings.DATABASE_URL:
-    DATABASE_URL = "sqlite+aiosqlite:///./app.db"
-    logger.info("DATABASE_URL未配置，使用默认的SQLite数据库")
-else:
-    DATABASE_URL = settings.DATABASE_URL
-    logger.info(f"使用配置的数据库URL: {DATABASE_URL.split('@')[0].split('://')[-1] if '@' in DATABASE_URL else DATABASE_URL[:50]}...")  # 避免密码泄露
+# NOW Find Agent 数据库配置 - 延迟初始化
+def get_database_url():
+    """延迟获取数据库URL，确保Nacos配置已加载"""
+    settings = get_settings()
+    if not settings.DATABASE_URL:
+        logger.info("DATABASE_URL未配置，使用默认的SQLite数据库")
+        return "sqlite+aiosqlite:///./app.db"
+    else:
+        logger.info(f"配置的数据库URL成功")
+        return settings.DATABASE_URL
+
+# 初始化变量，但延迟赋值
+DATABASE_URL = None
 
 
 # TODO: 数据库连接事件监听器将在变量定义后设置
@@ -107,12 +116,31 @@ def format_database_url(url: str) -> str:
     return url
 
 
-# 获取格式化后的数据库URL
-CLEANED_DATABASE_URL = format_database_url(DATABASE_URL)
-DB_TYPE = detect_database_type(CLEANED_DATABASE_URL)
+# 延迟获取数据库配置
+def get_database_config():
+    """延迟获取数据库配置，确保Nacos配置已加载"""
+    global DATABASE_URL, CLEANED_DATABASE_URL, DB_TYPE, SCHEMA_NAME, ENGINE_CONNECT_ARGS
+    
+    if DATABASE_URL is None:
+        DATABASE_URL = get_database_url()
+        CLEANED_DATABASE_URL = format_database_url(DATABASE_URL)
+        DB_TYPE = detect_database_type(CLEANED_DATABASE_URL)
+        SCHEMA_NAME = extract_schema_from_url(CLEANED_DATABASE_URL)
+        ENGINE_CONNECT_ARGS = build_connection_args(DB_TYPE, SCHEMA_NAME)
+    
+    return {
+        "DATABASE_URL": DATABASE_URL,
+        "CLEANED_DATABASE_URL": CLEANED_DATABASE_URL,
+        "DB_TYPE": DB_TYPE,
+        "SCHEMA_NAME": SCHEMA_NAME,
+        "ENGINE_CONNECT_ARGS": ENGINE_CONNECT_ARGS
+    }
 
-# 获取schema名称（使用清理后的URL）
-SCHEMA_NAME = extract_schema_from_url(CLEANED_DATABASE_URL)
+# 初始化变量
+CLEANED_DATABASE_URL = None
+DB_TYPE = None
+SCHEMA_NAME = None
+ENGINE_CONNECT_ARGS = None
 
 # 智能构建数据库连接参数
 def build_connection_args(db_type: str, schema_name: str) -> dict:
@@ -137,38 +165,41 @@ def build_connection_args(db_type: str, schema_name: str) -> dict:
     else:
         return {}
 
-# 构建连接参数
-ENGINE_CONNECT_ARGS = build_connection_args(DB_TYPE, SCHEMA_NAME)
-logger.info(f"🔧 数据库类型: {DB_TYPE.upper()}, 连接参数已配置")
-
-# 多数据库连接事件监听器设置
-if DB_TYPE == "postgresql" and "asyncpg" not in CLEANED_DATABASE_URL:
-    # 只对非asyncpg的PostgreSQL连接设置search_path
-    @event.listens_for(Pool, "connect")
-    def set_postgres_search_path(dbapi_connection, connection_record):
-        """为PostgreSQL新连接设置search_path"""
-        try:
-            cursor = dbapi_connection.cursor()
-            cursor.execute(f"SET search_path TO {SCHEMA_NAME}, public")
-            cursor.close()
-            logger.debug(f"🔧 PostgreSQL连接设置search_path: {SCHEMA_NAME}")
-        except Exception as e:
-            logger.warning(f"⚠️ PostgreSQL设置search_path失败: {e}")
-elif DB_TYPE == "mysql":
-    # MySQL连接初始化（如果需要特殊设置）
-    @event.listens_for(Pool, "connect")
-    def set_mysql_settings(dbapi_connection, connection_record):
-        """为MySQL连接设置特殊参数"""
-        try:
-            cursor = dbapi_connection.cursor()
-            # 设置MySQL特定参数（如字符集、时区等）
-            cursor.execute("SET NAMES utf8mb4")
-            cursor.execute("SET time_zone = '+00:00'")
-            cursor.close()
-            logger.debug(f"🔧 MySQL连接初始化完成")
-        except Exception as e:
-            logger.warning(f"⚠️ MySQL连接初始化失败: {e}")
-# SQLite不需要特殊的连接设置
+# 延迟设置数据库连接事件监听器
+def setup_database_event_listeners():
+    """设置数据库连接事件监听器"""
+    config = get_database_config()
+    db_type = config["DB_TYPE"]
+    cleaned_url = config["CLEANED_DATABASE_URL"]
+    schema_name = config["SCHEMA_NAME"]
+    
+    if db_type == "postgresql" and "asyncpg" not in cleaned_url:
+        # 只对非asyncpg的PostgreSQL连接设置search_path
+        @event.listens_for(Pool, "connect")
+        def set_postgres_search_path(dbapi_connection, connection_record):
+            """为PostgreSQL新连接设置search_path"""
+            try:
+                cursor = dbapi_connection.cursor()
+                cursor.execute(f"SET search_path TO {schema_name}, public")
+                cursor.close()
+                logger.debug(f"🔧 PostgreSQL连接设置search_path: {schema_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ PostgreSQL设置search_path失败: {e}")
+    elif db_type == "mysql":
+        # MySQL连接初始化（如果需要特殊设置）
+        @event.listens_for(Pool, "connect")
+        def set_mysql_settings(dbapi_connection, connection_record):
+            """为MySQL连接设置特殊参数"""
+            try:
+                cursor = dbapi_connection.cursor()
+                # 设置MySQL特定参数（如字符集、时区等）
+                cursor.execute("SET NAMES utf8mb4")
+                cursor.execute("SET time_zone = '+00:00'")
+                cursor.close()
+                logger.debug(f"🔧 MySQL连接初始化完成")
+            except Exception as e:
+                logger.warning(f"⚠️ MySQL连接初始化失败: {e}")
+    # SQLite不需要特殊的连接设置
 
 
 """ 异步引擎
@@ -190,58 +221,81 @@ pool_recycle
 这个指, 一个数据库连接的生存时间. 例如pool_recycle=3600. 也就是当这个连接产生1小时后, 再获得这个连接时, 会丢弃这个连接, 重新创建一个新的连接.
 当pool_recycle设置为-1时, 也就是连接池不会主动丢弃这个连接. 永久可用. 但是有可能数据库server设置了连接超时时间. 例如mysql, 设置的有wait_timeout默认为28800, 8小时. 当连接空闲8小时时会自动断开. 8小时后再用这个连接也会被重置.
 """
-engine = create_async_engine(
-    CLEANED_DATABASE_URL,  # 使用清理后的数据库URL
-    echo=False,  # 是否打印出实际执行的 sql, 调试的时候可能更方便
-    future=True,  # 使用 SQLAlchemy 2.0 API, 向后兼容
-    max_overflow=15,  # 当连接池里的连接数已达到 pool_size 且都被使用时,
-    pool_size=8,  # 接池中保持的连接数, 设置为 0 时表示连接无限制
-    pool_recycle=60 * 15,  # 15 minutes, 设置时间以限制数据库自动断开
-    pool_timeout=30.0,  # 如果超过这个时间, 还没有获得将会抛出异常
-    pool_pre_ping=True,  # 启用连接预检查,在使用连接前先ping数据库
-    pool_reset_on_return="commit",  # 连接返回池时重置状态
-    connect_args=ENGINE_CONNECT_ARGS,
-)
-async_session = async_sessionmaker(
-    bind=engine,
-    expire_on_commit=False,  # session.commit 之后仍然可以查询该对象
-)
+# 延迟创建引擎和会话工厂
+def get_engine():
+    """延迟创建数据库引擎"""
+    global engine, async_session
+    
+    if engine is None:
+        config = get_database_config()
+        
+        # 首先设置事件监听器
+        setup_database_event_listeners()
+        
+        logger.info(f"🔧 数据库类型: {config['DB_TYPE'].upper()}, 连接参数已配置")
+        
+        engine = create_async_engine(
+            config["CLEANED_DATABASE_URL"],  # 使用清理后的数据库URL
+            echo=False,  # 是否打印出实际执行的 sql, 调试的时候可能更方便
+            future=True,  # 使用 SQLAlchemy 2.0 API, 向后兼容
+            max_overflow=15,  # 当连接池里的连接数已达到 pool_size 且都被使用时,
+            pool_size=8,  # 接池中保持的连接数, 设置为 0 时表示连接无限制
+            pool_recycle=60 * 15,  # 15 minutes, 设置时间以限制数据库自动断开
+            pool_timeout=30.0,  # 如果超过这个时间, 还没有获得将会抛出异常
+            pool_pre_ping=True,  # 启用连接预检查,在使用连接前先ping数据库
+            pool_reset_on_return="commit",  # 连接返回池时重置状态
+            connect_args=config["ENGINE_CONNECT_ARGS"],
+        )
+        async_session = async_sessionmaker(
+            bind=engine,
+            expire_on_commit=False,  # session.commit 之后仍然可以查询该对象
+        )
+    
+    return engine, async_session
+
+# 初始化变量
+engine = None
+async_session = None
 
 
 async def check_database_health():
     """多数据库健康检查 - 智能适配不同数据库类型"""
     try:
+        engine, async_session = get_engine()
+        config = get_database_config()
+        
         async with async_session() as session:
             # 基本连接测试 - 所有数据库都支持
             await session.execute(text("SELECT 1"))
             
             # 根据数据库类型执行特定检查
-            if DB_TYPE == "postgresql":
+            if config["DB_TYPE"] == "postgresql":
                 # PostgreSQL特有检查
                 result = await session.execute(text("SHOW search_path"))
                 search_path = result.scalar()
                 logger.debug(f"PostgreSQL search_path: {search_path}")
-            elif DB_TYPE == "mysql":
+            elif config["DB_TYPE"] == "mysql":
                 # MySQL特有检查
                 result = await session.execute(text("SELECT DATABASE()"))
                 db_name = result.scalar()
                 logger.debug(f"MySQL当前数据库: {db_name}")
-            elif DB_TYPE == "sqlite":
+            elif config["DB_TYPE"] == "sqlite":
                 # SQLite特有检查
                 result = await session.execute(text("PRAGMA database_list"))
                 db_info = result.fetchall()
                 logger.debug(f"SQLite数据库列表: {len(db_info)} 个数据库")
             
-        logger.info(f"✅ {DB_TYPE.upper()} 数据库健康检查通过")
+        logger.info(f"✅ {config['DB_TYPE'].upper()} 数据库健康检查通过")
         return True
     except Exception as e:
-        logger.error(f"❌ {DB_TYPE.upper()} 数据库健康检查失败: {e}")
+        logger.error(f"❌ 数据库健康检查失败: {e}")
         return False
 
 
 async def get_database_pool_status():
     """获取数据库连接池状态信息"""
     try:
+        engine, _ = get_engine()
         pool = engine.pool
         status = {
             "size": pool.size(),
@@ -261,3 +315,52 @@ async def get_database_pool_status():
     except Exception as e:
         logger.error(f"获取连接池状态失败: {e}")
         return None
+
+
+# 全局变量用于支持动态重新初始化
+_initialized = False
+
+async def initialize_database():
+    """动态初始化数据库连接（支持配置变更后的重新初始化）"""
+    global _initialized, DATABASE_URL, CLEANED_DATABASE_URL, DB_TYPE, SCHEMA_NAME, ENGINE_CONNECT_ARGS, engine, async_session
+    
+    try:
+        # 如果已经初始化过，先关闭旧连接
+        if _initialized and engine is not None:
+            try:
+                await engine.dispose()
+                logger.info("旧的数据库连接已关闭")
+            except Exception as e:
+                logger.warning(f"关闭旧数据库连接时出错: {e}")
+        
+        # 重置所有全局变量，强制重新加载配置
+        DATABASE_URL = None
+        CLEANED_DATABASE_URL = None
+        DB_TYPE = None
+        SCHEMA_NAME = None
+        ENGINE_CONNECT_ARGS = None
+        engine = None
+        async_session = None
+        
+        # 获取新的配置和引擎
+        config = get_database_config()
+        engine, async_session = get_engine()
+        
+        _initialized = True
+        logger.info(f"✅ 数据库重新初始化成功: {config['DB_TYPE'].upper()}")
+        logger.info(f"🔧 数据库类型: {config['DB_TYPE'].upper()}, 连接参数已配置")
+        
+        # 测试连接
+        await check_database_health()
+        
+    except Exception as e:
+        logger.error(f"❌ 数据库初始化失败: {e}")
+        raise
+
+
+# 导出初始化函数
+__all__ = [
+    "engine", "async_session", "DB_TYPE", "SCHEMA_NAME", "CLEANED_DATABASE_URL",
+    "check_database_health", "get_database_pool_status", "initialize_database",
+    "get_database_url", "get_database_config", "get_engine"
+]

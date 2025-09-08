@@ -1,14 +1,19 @@
 """
 应用配置管理
-基于环境变量的分层配置系统
+基于环境变量和Nacos配置中心的分层配置系统
 """
 
 import os
+import asyncio
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
+from loguru import logger
+
+from .nacos import NacosConfigManager, NacosSettings
+from .secure_config import get_secure_config_manager
 
 
 class BaseAppSettings(BaseSettings):
@@ -17,6 +22,7 @@ class BaseAppSettings(BaseSettings):
     # 应用基础配置
     NAME: str = Field(default="FastAPI App", description="应用名称")
     ENV: str = Field(default="dev", description="环境名称")
+    DEPLOY_ENV: str = Field(default="dev", description="部署环境")
     
     # 服务器配置
     SERVER_HOST: str = Field(default="0.0.0.0", description="服务器地址")
@@ -71,9 +77,204 @@ class BaseAppSettings(BaseSettings):
     # 第三方服务配置
     FIRECRAWL_KEY: Optional[str] = Field(default=None, description="Firecrawl API密钥")
     
+    # Nacos配置中心设置
+    USE_NACOS: bool = Field(default=True, description="是否使用Nacos配置中心")
+    NACOS_SERVER: Optional[str] = Field(default=None, description="Nacos服务器地址")
+    NACOS_NAMESPACE: Optional[str] = Field(default=None, description="Nacos命名空间")
+    NACOS_GROUP: Optional[str] = Field(default=None, description="Nacos分组")
+    NACOS_ACCESS_KEY: Optional[str] = Field(default=None, description="Nacos访问密钥")
+    NACOS_SECRET_KEY: Optional[str] = Field(default=None, description="Nacos密钥")
+    NACOS_TIMEOUT: int = Field(default=30, description="Nacos连接超时时间")
+    NACOS_MAX_RETRY: int = Field(default=3, description="Nacos最大重试次数")
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._nacos_manager: Optional[NacosConfigManager] = None
+        self._nacos_config: Dict[str, Any] = {}
+    
+    async def initialize_nacos(self):
+        """初始化Nacos配置中心"""
+        # 初始化安全配置管理器
+        secure_manager = get_secure_config_manager()
+        
+        if not self.USE_NACOS:
+            logger.info("Nacos configuration center disabled, using secure local configuration")
+            # 在开发环境加载安全配置
+            if self.ENV == "dev":
+                secure_manager.load_development_config()
+                secure_manager.log_config_summary()
+            return
+        
+        try:
+            # 创建Nacos管理器
+            nacos_settings = NacosSettings()
+            self._nacos_manager = NacosConfigManager(nacos_settings)
+            
+            # 初始化客户端
+            initialized = await self._nacos_manager.initialize()
+            if initialized:
+                # 加载配置
+                self._nacos_config = await self._nacos_manager.load_all_configs(self.ENV)
+                
+                # 如果Nacos配置为空，使用安全本地配置
+                if not self._nacos_config.get("database") and self.ENV == "dev":
+                    logger.info("Nacos configuration empty, using secure local configuration")
+                    secure_manager.load_development_config()
+                    
+                    # 应用本地配置
+                    self.DATABASE_URL = secure_manager.build_database_url()
+                    self.REDIS_URL = secure_manager.build_redis_url()
+                    
+                    # 设置第三方服务配置
+                    tencent_config = secure_manager.get_tencent_asr_config()
+                    sparta_config = secure_manager.get_sparta_job_config()
+                    
+                    if tencent_config["secret_id"]:
+                        os.environ["TENCENT_ASR_SECRET_ID"] = tencent_config["secret_id"]
+                        os.environ["TENCENT_ASR_SECRET_KEY"] = tencent_config["secret_key"]
+                    
+                    if sparta_config["address"]:
+                        os.environ["SPARTA_JOB_ADDRESS"] = sparta_config["address"]
+                        os.environ["SPARTA_JOB_TOKEN"] = sparta_config["token"]
+                    
+                    secure_manager.log_config_summary()
+                else:
+                    # 应用Nacos配置
+                    await self._apply_nacos_config()
+                
+                logger.info("Configuration initialized successfully")
+            else:
+                logger.warning("Failed to initialize Nacos, using secure local configuration")
+                if self.ENV == "dev":
+                    secure_manager.load_development_config()
+                    secure_manager.log_config_summary()
+                
+        except Exception as e:
+            logger.error(f"Error initializing configuration: {e}")
+            # 降级到安全本地配置
+            if self.ENV == "dev":
+                secure_manager.load_development_config()
+                secure_manager.log_config_summary()
+    
+    async def _apply_nacos_config(self):
+        """应用Nacos配置"""
+        if not self._nacos_config:
+            return
+        
+        # 应用数据库配置
+        if "database" in self._nacos_config:
+            db_config = self._nacos_config["database"]
+            if "url" in db_config:
+                self.DATABASE_URL = db_config["url"]
+                logger.info(f"Applied database URL from Nacos")
+            if "username" in db_config:
+                self.DATABASE_USERNAME = db_config["username"]
+            if "password" in db_config:
+                self.DATABASE_PASSWORD = db_config["password"]
+        
+        # 应用Redis配置
+        if "redis" in self._nacos_config:
+            redis_config = self._nacos_config["redis"]
+            if "host" in redis_config:
+                self.REDIS_HOST = redis_config["host"]
+            if "port" in redis_config:
+                self.REDIS_PORT = redis_config["port"]
+            if "password" in redis_config:
+                self.REDIS_PASSWORD = redis_config["password"]
+            if "db" in redis_config:
+                self.REDIS_DB = redis_config["db"]
+            if "url" in redis_config:
+                self.REDIS_URL = redis_config["url"]
+                logger.info(f"Applied Redis URL from Nacos")
+        
+        # 应用服务器配置
+        if "server" in self._nacos_config:
+            server_config = self._nacos_config["server"]
+            if "host" in server_config:
+                self.SERVER_HOST = server_config["host"]
+            if "port" in server_config:
+                self.SERVER_PORT = server_config["port"]
+            if "debug" in server_config:
+                self.DEBUG = server_config["debug"]
+        
+        # 应用日志配置
+        if "logging" in self._nacos_config:
+            logging_config = self._nacos_config["logging"]
+            if "level" in logging_config:
+                self.LOG_LEVEL = logging_config["level"]
+            if "path" in logging_config:
+                self.LOG_PATH = logging_config["path"]
+            if "error_path" in logging_config:
+                self.LOG_PATH_ERROR = logging_config["error_path"]
+        
+        # 存储第三方服务配置
+        if "third_party" in self._nacos_config:
+            third_party_config = self._nacos_config["third_party"]
+            if "tencent_asr" in third_party_config:
+                # 设置腾讯ASR配置到环境变量
+                tencent_asr = third_party_config["tencent_asr"]
+                if "secret_id" in tencent_asr:
+                    os.environ["TENCENT_ASR_SECRET_ID"] = tencent_asr["secret_id"]
+                if "secret_key" in tencent_asr:
+                    os.environ["TENCENT_ASR_SECRET_KEY"] = tencent_asr["secret_key"]
+                logger.info("Applied Tencent ASR configuration from Nacos")
+            
+            if "sparta_job" in third_party_config:
+                # 设置Sparta作业配置到环境变量
+                sparta_job = third_party_config["sparta_job"]
+                if "address" in sparta_job:
+                    os.environ["SPARTA_JOB_ADDRESS"] = sparta_job["address"]
+                if "token" in sparta_job:
+                    os.environ["SPARTA_JOB_TOKEN"] = sparta_job["token"]
+                logger.info("Applied Sparta job configuration from Nacos")
+        
+        logger.info("Nacos configuration applied successfully")
+    
+    def get_nacos_config(self, key: str, default: Any = None) -> Any:
+        """获取Nacos配置值"""
+        return self._nacos_config.get(key, default)
+    
+    def get_tencent_asr_config(self) -> Dict[str, str]:
+        """获取腾讯ASR配置"""
+        third_party = self._nacos_config.get("third_party", {})
+        return third_party.get("tencent_asr", {})
+    
+    def get_sparta_job_config(self) -> Dict[str, str]:
+        """获取Sparta作业配置"""
+        third_party = self._nacos_config.get("third_party", {})
+        return third_party.get("sparta_job", {})
+    
+    def get_kafka_config(self) -> Dict[str, Any]:
+        """获取Kafka配置"""
+        return self._nacos_config.get("kafka", {})
+    
+    async def watch_nacos_config(self):
+        """监听Nacos配置变更"""
+        if not self._nacos_manager or not self._nacos_manager.is_initialized():
+            return
+        
+        async def on_config_change(config_data: str):
+            """配置变更回调"""
+            logger.info("Nacos configuration changed, reloading...")
+            try:
+                # 重新加载配置
+                self._nacos_config = await self._nacos_manager.load_all_configs(self.ENV)
+                await self._apply_nacos_config()
+                logger.info("Nacos configuration reloaded successfully")
+            except Exception as e:
+                logger.error(f"Error reloading Nacos configuration: {e}")
+        
+        # 监听所有配置
+        await self._nacos_manager.watch_all_configs(self.ENV, on_config_change)
+    
+    async def close_nacos(self):
+        """关闭Nacos连接"""
+        if self._nacos_manager:
+            await self._nacos_manager.close()
 
 
 class DevelopmentSettings(BaseAppSettings):
@@ -148,3 +349,16 @@ def get_settings() -> BaseAppSettings:
         return ProductionSettings()
     else:
         return DevelopmentSettings()  # 默认开发环境
+
+
+async def initialize_nacos_config():
+    """初始化Nacos配置"""
+    settings = get_settings()
+    await settings.initialize_nacos()
+    await settings.watch_nacos_config()
+
+
+async def cleanup_nacos_config():
+    """清理Nacos配置"""
+    settings = get_settings()
+    await settings.close_nacos()
